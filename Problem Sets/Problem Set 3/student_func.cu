@@ -80,7 +80,84 @@
 */
 
 #include "utils.h"
+#include <cstdio>
 
+
+__global__ void minReduce(float* const d_array, const size_t size) {
+  int id = threadIdx.x + blockIdx.x * blockDim.x;
+
+  if (id > size) {
+    return ;
+  }
+
+  for (int i = size >> 1; i > 0; i >>= 1) {
+    if (id + i < size && d_array[id + i] < d_array[id]) {
+      d_array[id] = d_array[id + i];
+    }
+    __syncthreads();
+  }
+}
+
+__global__ void maxReduce(float* const d_array, const size_t size) {
+  int id = threadIdx.x + blockIdx.x * blockDim.x;
+
+  if (id > size) {
+    return ;
+  }
+
+  for (int i = size >> 1; i > 0; i >>= 1) {
+    if (id + i < size && d_array[id + i] > d_array[id]) {
+      d_array[id] = d_array[id + i];
+    }
+    __syncthreads();
+  }
+}
+
+__global__ void getBins(const float* const d_logLuminance, int* const d_bins,
+                        float lumRange, float logLumMin,
+                        int size, const size_t numBins) {
+  int id = threadIdx.x + blockDim.x * blockIdx.x;
+  if (id > size) {
+    return ;
+  }
+
+  int bin = (d_logLuminance[id] - logLumMin) / lumRange * numBins;
+  if (bin > numBins) {
+    bin = numBins - 1;
+  }
+  atomicAdd(&d_bins[bin], 1);
+}
+
+__global__ void scan(const int* const d_bins, unsigned int* const d_cdf,
+                     const size_t numBins) {
+  int id = threadIdx.x + blockDim.x * blockIdx.x;
+  if (id > numBins) {
+    return ;
+  }
+
+  d_cdf[id] = d_bins[id];
+  __syncthreads();
+
+  for (int i = 1; i <= (numBins >> 1); i <<= 1) {
+    if (id - i < 0) {
+      continue;
+    }
+    int temp = d_cdf[id - i];
+    __syncthreads();
+    d_cdf[id] += temp;
+  }
+  __syncthreads();
+  if (id > 0) {
+    unsigned int prev = d_cdf[id - 1];
+    __syncthreads();
+    d_cdf[id] = prev;
+  }
+  if (id == 0) {
+    d_cdf[0] = 0;
+  }
+}
+
+// d_cfd/min_logLum/max_logLum need to be set, other parameters are read-only.
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
@@ -99,6 +176,44 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     4) Perform an exclusive scan (prefix sum) on the histogram to get
        the cumulative distribution of luminance values (this should go in the
        incoming d_cdf pointer which already has been allocated for you)       */
+  int size = numRows * numCols;
+
+  float* d_array;
+  float* h_out;
+  checkCudaErrors(cudaMalloc(&d_array, sizeof(float) * size));
+  checkCudaErrors(cudaMallocHost(&h_out, sizeof(float)));
+
+  dim3 blockSize = 1024;
+  dim3 gridSize = (size + 1024 - 1) / 1024;
+
+  checkCudaErrors(cudaMemcpy(d_array, d_logLuminance, sizeof(float) * size, cudaMemcpyDeviceToDevice));
+  minReduce<<<gridSize, blockSize>>>(d_array, size);
+  minReduce<<<1, blockSize>>>(d_array, numCols);
+  checkCudaErrors(cudaMemcpy(h_out, d_array, sizeof(float), cudaMemcpyDeviceToHost));
+  min_logLum = *h_out;
+
+  checkCudaErrors(cudaMemcpy(d_array, d_logLuminance, sizeof(float) * size, cudaMemcpyDeviceToDevice));
+  maxReduce<<<gridSize, blockSize>>>(d_array, size);
+  maxReduce<<<1, blockSize>>>(d_array, numCols);
+  checkCudaErrors(cudaMemcpy(h_out, d_array, sizeof(float), cudaMemcpyDeviceToHost));
+  max_logLum = *h_out;
+
+  float lumRange = max_logLum - min_logLum;
+
+  int* d_bins;
+  checkCudaErrors(cudaMalloc(&d_bins, sizeof(int) * numBins));
+  checkCudaErrors(cudaMemset(d_bins, 0, sizeof(int) * numBins));
+  getBins<<<gridSize, blockSize>>>(d_logLuminance, d_bins, lumRange, min_logLum, size, numBins);
+  gridSize = (numBins + 1024 - 1) / 1024;
+  scan<<<gridSize, blockSize>>>(d_bins, d_cdf, numBins);
+
+  int* h_data;
+  checkCudaErrors(cudaMallocHost(&h_data, sizeof(int) * numBins));
+  checkCudaErrors(cudaMemcpy(h_data, d_cdf, sizeof(int) * numBins, cudaMemcpyDeviceToHost));
 
 
+  checkCudaErrors(cudaFree(d_array));
+  checkCudaErrors(cudaFreeHost(h_out));
+  checkCudaErrors(cudaFree(d_bins));
+  checkCudaErrors(cudaFreeHost(h_data));
 }
