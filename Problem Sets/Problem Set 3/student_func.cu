@@ -6,7 +6,7 @@
 
   A High Dynamic Range (HDR) image contains a wider variation of intensity
   and color than is allowed by the RGB format with 1 byte per channel that we
-  have used in the previous assignment.  
+  have used in the previous assignment.
 
   To store this extra information we use single precision floating point for
   each channel.  This allows for an extremely wide range of intensity values.
@@ -85,8 +85,7 @@
 
 __global__ void minReduce(float* const d_array, const size_t size) {
   int id = threadIdx.x + blockIdx.x * blockDim.x;
-
-  if (id > size) {
+  if (id >= size) {
     return ;
   }
 
@@ -100,8 +99,7 @@ __global__ void minReduce(float* const d_array, const size_t size) {
 
 __global__ void maxReduce(float* const d_array, const size_t size) {
   int id = threadIdx.x + blockIdx.x * blockDim.x;
-
-  if (id > size) {
+  if (id >= size) {
     return ;
   }
 
@@ -131,30 +129,26 @@ __global__ void getBins(const float* const d_logLuminance, int* const d_bins,
 __global__ void scan(const int* const d_bins, unsigned int* const d_cdf,
                      const size_t numBins) {
   int id = threadIdx.x + blockDim.x * blockIdx.x;
-  if (id > numBins) {
+  if (id >= numBins) {
     return ;
   }
 
-  d_cdf[id] = d_bins[id];
+  extern __shared__ int local[];
+  local[id] = d_bins[id];
   __syncthreads();
 
-  for (int i = 1; i <= (numBins >> 1); i <<= 1) {
+  for (int i = 1; i < numBins; i <<= 1) {
     if (id - i < 0) {
       continue;
     }
-    int temp = d_cdf[id - i];
+    int temp = local[id - i];
     __syncthreads();
-    d_cdf[id] += temp;
+    local[id] += temp;
+    __syncthreads();
   }
+
   __syncthreads();
-  if (id > 0) {
-    unsigned int prev = d_cdf[id - 1];
-    __syncthreads();
-    d_cdf[id] = prev;
-  }
-  if (id == 0) {
-    d_cdf[0] = 0;
-  }
+  d_cdf[id] = id == 0 ? 0 : local[id - 1];
 }
 
 // d_cfd/min_logLum/max_logLum need to be set, other parameters are read-only.
@@ -205,7 +199,7 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
   checkCudaErrors(cudaMemset(d_bins, 0, sizeof(int) * numBins));
   getBins<<<gridSize, blockSize>>>(d_logLuminance, d_bins, lumRange, min_logLum, size, numBins);
   gridSize = (numBins + 1024 - 1) / 1024;
-  scan<<<gridSize, blockSize>>>(d_bins, d_cdf, numBins);
+  scan<<<gridSize, blockSize, numBins * sizeof(int)>>>(d_bins, d_cdf, numBins);
 
   int* h_data;
   checkCudaErrors(cudaMallocHost(&h_data, sizeof(int) * numBins));
