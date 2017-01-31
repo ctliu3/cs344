@@ -2,6 +2,7 @@
 #define UTILS_H__
 
 #include <iostream>
+#include <cstdio>
 #include <iomanip>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -24,6 +25,7 @@ template<typename T>
 void checkResultsExact(const T* const ref, const T* const gpu, size_t numElem) {
   //check that the GPU result matches the CPU result
   for (size_t i = 0; i < numElem; ++i) {
+    // fprintf(stdout, "cpu = %d, gpu = %d\n", ref[i], gpu[i]);
     if (ref[i] != gpu[i]) {
       std::cerr << "Difference at pos " << i << std::endl;
       //the + is magic to convert char to int without messing
