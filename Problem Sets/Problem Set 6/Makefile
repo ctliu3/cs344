@@ -1,4 +1,4 @@
-NVCC=/usr/local/cuda-5.0/bin/nvcc
+NVCC=/usr/local/cuda/bin/nvcc
 #NVCC=nvcc
 
 ###################################
@@ -18,7 +18,7 @@ OPENCV_INCLUDEPATH=/usr/include
 
 OPENCV_LIBS=-lopencv_core -lopencv_imgproc -lopencv_highgui
 
-CUDA_INCLUDEPATH=/usr/local/cuda-5.0/include
+CUDA_INCLUDEPATH=/usr/local/cuda/include
 # CUDA_INCLUDEPATH=/usr/local/cuda/lib64/include
 # CUDA_INCLUDEPATH=/usr/local/cuda-5.0/include
 # CUDA_INCLUDEPATH=/Developer/NVIDIA/CUDA-5.0/include
@@ -29,11 +29,11 @@ CUDA_INCLUDEPATH=/usr/local/cuda-5.0/include
 
 #CUDA_INCLUDEPATH=/usr/local/cuda/include
 #CUDA_LIBPATH=/usr/local/cuda/lib
-CUDA_LIBPATH=/usr/local/cuda-5.0/lib64
+CUDA_LIBPATH=/usr/local/cuda/lib64
 
 #no warnings otherwise thrust explodes output
 
-NVCC_OPTS=-O3 -arch=sm_20 -m64
+NVCC_OPTS=-O3 -arch=sm_50 -m64
 
 GCC_OPTS=-O3 -m64
 

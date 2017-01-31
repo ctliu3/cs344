@@ -192,7 +192,6 @@ void reference_calc(const uchar4* const h_sourceImg,
     computeIteration(red_dst, strictInteriorPixels, borderPixels,
                      interiorPixelList, numColsSource, blendedValsRed_1, g_red,
                      blendedValsRed_2);
-
     std::swap(blendedValsRed_1, blendedValsRed_2);
   }
 
@@ -214,6 +213,12 @@ void reference_calc(const uchar4* const h_sourceImg,
   std::swap(blendedValsRed_1,   blendedValsRed_2);   //put output into _2
   std::swap(blendedValsBlue_1,  blendedValsBlue_2);  //put output into _2
   std::swap(blendedValsGreen_1, blendedValsGreen_2); //put output into _2
+
+  // for (int j = 0; j < srcSize; ++j) {
+    // if (blendedValsRed_2[j] != 255) {
+      // printf("host %d %f\n", j, blendedValsRed_2[j]);
+    // }
+  // }
 
   //copy the destination image to the output
   memcpy(h_blendedImg, h_destImg, sizeof(uchar4) * srcSize);
